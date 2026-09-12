@@ -2,54 +2,79 @@ import re
 import streamlit as st
 
 # ==========================================
-# 1. 문항별 채점 로직 정의
+# 1. 커스텀 CSS (파란 상자 & 회색 상자 스타일)
+# ==========================================
+st.set_page_config(page_title="서논술형 자동 채점 시스템", layout="wide")
+
+st.markdown("""
+<style>
+    /* 파란 상자: 지문 및 자료 */
+    .blue-box {
+        background-color: #eef6ff;
+        border-left: 5px solid #2b7fff;
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        color: #1a2530;
+    }
+    /* 회색 상자: 조건 */
+    .gray-box {
+        background-color: #f2f4f7;
+        border: 1px solid #d0d5dd;
+        padding: 12px 18px;
+        border-radius: 8px;
+        margin-top: 8px;
+        margin-bottom: 15px;
+        color: #344054;
+    }
+    /* 입력창 간격 조절 */
+    .stTextInput, .stTextArea {
+        margin-top: -10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 2. 채점 로직 정의
 # ==========================================
 
 def grade_set1_q1(ans1, ans2, ans3):
     score = 0
     feedback = []
-
-    # (1) 번 채점: 쉬운 과제/친숙한 과목
     kw1 = ["쉬운", "노력", "친숙", "좋아하는"]
     if any(k in ans1 for k in kw1):
         score += 2
         feedback.append("(1) 정답 (+2점)")
     else:
-        feedback.append("(1) 오답: '쉬운 과제' 또는 '친숙한 과목' 특성이 미포함됨")
+        feedback.append("(1) 오답: '쉬운 과제' 또는 '친숙한 과목' 특성 미포함")
 
-    # (2) 번 채점: 혼자/집중/연습 (오개념 방지: 타인/함께 관련 어휘가 포함되면 오답)
     kw2_pos = ["혼자", "차분", "집중", "익숙", "연습"]
     kw2_neg = ["함께", "모임", "친구", "도서관", "커피숍"]
     if any(k in ans2 for k in kw2_pos) and not any(k in ans2 for k in kw2_neg):
         score += 2
         feedback.append("(2) 정답 (+2점)")
     elif any(k in ans2 for k in kw2_neg):
-        feedback.append("(2) 오답 (오개념): 어려운 과제에 '타인과 함께함' 특성을 적용함")
+        feedback.append("(2) 오답 (오개념): 어려운 과제에 '타인과 함께함' 특성 적용")
     else:
-        feedback.append("(2) 오답: '혼자 차분히 집중함'의 의미가 부족함")
+        feedback.append("(2) 오답: '혼자 차분히 집중함'의 의미 부족")
 
-    # (3) 번 채점: 사회적 억제 (정확한 명칭 필수)
     if "사회적 억제" in ans3.replace(" ", ""):
         score += 2
         feedback.append("(3) 정답 (+2점)")
     else:
-        feedback.append("(3) 오답: 정확한 학술 용어인 '사회적 억제'가 입력되지 않음")
+        feedback.append("(3) 오답: 정확한 학술 용어인 '사회적 억제' 미입력")
 
     return score, feedback
-
 
 def grade_set1_q2(ans1, ans2):
     score = 0
     feedback = []
-
-    # 설명 방법 인정 맵 (용어 미표기 시에도 문장 내 의미 표현이 있으면 인정)
     methods = {
         "예시": ["예를 들어", "예컨대", "커피숍", "도서관", "모임"],
         "대조": ["반면", "반대에", "달리", "차분히 혼자"],
         "인과": ["때문에", "하므로", "효과적이다", "높일 수 있다"],
         "정의": ["란", "이란", "의미한다", "말한다"]
     }
-
     def detect_method(text):
         found = []
         for m, kws in methods.items():
@@ -60,20 +85,18 @@ def grade_set1_q2(ans1, ans2):
     m1 = detect_method(ans1)
     m2 = detect_method(ans2)
 
-    # (1)번 문장: 쉬운 과제 관련 결론 확인
     c1_pos = ["효과", "높이", "좋다", "함께", "도서관", "커피숍"]
     if any(k in ans1 for k in c1_pos) and len(m1) > 0:
         score += 2
         feedback.append("(1) 문장 정답 (+2점)")
     else:
-        feedback.append("(1) 문장 감점/오답: 설명 방법 특성 미흡 또는 쉬운 과제 학습 전략 결론 미달성")
+        feedback.append("(1) 문장 감점/오답: 설명 방법 특성 미흡 또는 결론 미달성")
 
-    # (2)번 문장: 어려운 과제 관련 결론 및 (1)과의 설명 방법 중복 여부 확인
     c2_pos = ["혼자", "집중", "시간", "익숙"]
     if any(k in ans2 for k in c2_pos) and len(m2) > 0:
         if set(m1) == set(m2) and len(m1) == 1:
             score += 1
-            feedback.append("(2) 문장 부분 점수 (+1점): (1)과 동일한 설명 방법을 중복 사용함")
+            feedback.append("(2) 문장 부분 점수 (+1점): (1)과 동일한 설명 방법 중복 사용")
         else:
             score += 2
             feedback.append("(2) 문장 정답 (+2점)")
@@ -82,159 +105,159 @@ def grade_set1_q2(ans1, ans2):
 
     return score, feedback
 
-
 def grade_set1_q3(vis_plan, vis_eff, aud_plan, aud_eff):
     score = 0
     feedback = []
-
-    # 시각 연출 및 효과 검증 (오개념 체크: 여럿이 함께하는 연출 금지)
     if any(k in vis_plan for k in ["혼자", "단독", "개인", "몰입"]) and not any(k in vis_plan for k in ["함께", "여럿", "친구"]):
         if any(k in vis_eff for k in ["어려운", "도전", "혼자", "집중"]):
             score += 3
             feedback.append("시각 요소 연출 및 효과 정답 (+3점)")
         else:
             score += 1.5
-            feedback.append("시각 요소 부분 점수 (+1.5점): 연출은 적절하나 효과 서술에 지문 근거(어려운 과제=혼자 집중)가 부족함")
+            feedback.append("시각 요소 부분 점수 (+1.5점): 연출은 적절하나 효과 서술 근거 부족")
     else:
-        feedback.append("시각 요소 오답: '혼자 집중하는 환경' 연출 미흡 또는 오개념(타인 동반) 포함")
+        feedback.append("시각 요소 오답: '혼자 집중하는 환경' 연출 미흡 또는 오개념 포함")
 
-    # 청각 연출 및 효과 검증
     if any(k in aud_plan for k in ["정적", "최소", "배제", "소음", "연필", "잔잔", "조용한"]):
         if any(k in aud_eff for k in ["차단", "안정", "집중", "차분"]):
             score += 3
             feedback.append("청각 요소 연출 및 효과 정답 (+3점)")
         else:
             score += 1.5
-            feedback.append("청각 요소 부분 점수 (+1.5점): 연출은 적절하나 효과 서술에 지문 근거 연결 부족")
+            feedback.append("청각 요소 부분 점수 (+1.5점): 연출은 적절하나 효과 서술 근거 부족")
     else:
-        feedback.append("청각 요소 오답: 자극을 줄이고 집중을 돕는 정적 연출 미흡")
+        feedback.append("청각 요소 오답: 정적 연출 미흡")
 
     return score, feedback
 
-
 # ==========================================
-# 2. Streamlit UI 화면 구성
+# 3. UI 구성
 # ==========================================
 
-st.set_page_config(page_title="서논술형 자동 채점 시스템", layout="wide")
-st.title("📝 서논술형 답안 자동 채점 & 피드백 시스템")
-st.caption("2회고사 대비 모의 문항 자동 채점 웹 UI")
+st.title("📝 서논술형 답안 작성 및 자동 채점 시스템")
 
 tab1, tab2, tab3 = st.tabs(["[세트 1] 사회적 촉진/억제", "[세트 2] 정전기 특징", "[세트 3] AI와 예술"])
 
-# ------------------------------------------
-# TAB 1: 세트 1 채점 UI
-# ------------------------------------------
 with tab1:
-    st.header("1번 세트: 사회적 촉진과 억제")
+    # 자료 영역 (파란 상자)
+    st.markdown("""
+    <div class="blue-box">
+        <h4>📖 [지문 자료]</h4>
+        <p><b>기자:</b> 심리학 용어인 '사회적 촉진'과 '사회적 억제'를 일상생활, 특히 우리의 학습에 어떻게 적용할 수 있을까요?</p>
+        <p><b>전문가:</b> 이 두 가지 개념을 알면 상황에 맞춰 유용하게 활용할 수 있습니다. 예를 들어, 비교적 쉬운 취미 생활이나 큰 노력을 들일 필요가 없는 과제를 할 때는 어떨까요?</p>
+        <p><b>기자:</b> 음, 그냥 집에서 편하게 혼자 하는 게 집중이 잘되지 않을까요?</p>
+        <p><b>전문가:</b> 그렇지 않습니다. 오히려 집에서 혼자 하는 것보다는 커피숍이나 도서관에서 하는 것이 더 효율적일 수 있습니다. 평소 친숙하고 좋아하는 과목이라면 공부 모임을 만들어 다른 사람들과 함께 공부하는 것도 좋은 방법이죠.</p>
+        <p><b>기자:</b> 그렇다면 어렵고 복잡한 과제를 할 때는 어떻게 해야 하나요?</p>
+        <p><b>전문가:</b> 그럴 때는 반대입니다. 지나치게 어렵거나 도전이 필요한 과제는 충분히 연습하며 익숙해질 때까지 차분하게 혼자 집중하는 시간을 가지는 것이 좋습니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with st.expander("📌 [세트 1] 선택지별 모범 답안 보기"):
-        st.markdown("""
-        **[서·논술형 1] 모범 답안**
-        - (1) 쉬운 취미 생활이나 큰 노력이 필요 없는 과제 (또는 친숙하고 좋아하는 과목)
-        - (2) 차분하게 혼자 집중하는 시간을 가짐
-        - (3) 사회적 억제
+    # --------------------------------------
+    # 문항 1
+    # --------------------------------------
+    st.subheader("[서·논술형 1]")
+    st.write("윗글을 요약하여 표로 정리하였다. (1)~(3)에 들어갈 내용을 찾아 쓰시오.")
 
-        **[서·논술형 2] 선택지별 모범 답안 (주어진 제시문 뒤 연결)**
-        - **선택지 A (예시 + 대조 조합)**
-          - (1) 쉬운 과제나 친숙한 과목을 공부할 때에는 커피숍이나 도서관을 이용하거나 공부 모임을 만들어 타인과 함께하는 것이 효과적이다. (예시)
-          - (2) 반면에 지나치게 어렵거나 복잡하여 도전이 필요한 과제는 차분히 혼자 집중하는 시간을 충분히 가져야 익숙해질 수 있다. (대조)
-        - **선택지 B (인과 + 대조 조합)**
-          - (1) 쉬운 과제는 타인의 존재가 학습 효율을 높여주기 때문에 커피숍이나 도서관에서 함께 공부하는 것이 좋다. (인과)
-          - (2) 이와 달리 어려운 과제는 타인의 시선이 억제 요소가 되므로 혼자 익숙해질 때까지 집중해야 한다. (대조)
-
-        **[서·논술형 3] 모범 답안**
-        - **(1) 시각 연출**: 방에서 학생 혼자 책상에 앉아 차분히 과제에 몰입하는 모습을 연출함.
-          - **효과**: 어렵고 도전적인 과제는 타인의 시선을 차단하고 혼자 집중하는 환경이 필요하다는 지문 내용을 시각화함.
-        - **(2) 청각 연출**: 경쾌한 음악을 배제하고 연필 소리나 잔잔한 자연 소음만 최소한으로 깔아둠.
-          - **효과**: 정막함을 조성하여 심리적 안정감을 주고 차분히 혼자 집중할 때 효율이 오른다는 점을 강조함.
-        """)
-
-    st.subheader("[서·논술형 1] 빈칸 채우기")
-    c1_1 = st.text_input("특성 (1) 답안:", key="s1_q1_1")
-    c1_2 = st.text_input("환경 및 방법 (2) 답안:", key="s1_q1_2")
-    c1_3 = st.text_input("심리 현상 (3) 답안:", key="s1_q1_3")
-
-    st.subheader("[서·논술형 2] 설명문 작성")
-    c2_1 = st.text_area("(1) 문장 작성 (설명 방법 포함):", key="s1_q2_1")
-    c2_2 = st.text_area("(2) 문장 작성 (설명 방법 포함):", key="s1_q2_2")
-
-    st.subheader("[서·논술형 3] 영상 기획안 작성")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        c3_v_p = st.text_area("(1) 시각 연출 계획 (Ⓐ):", key="s1_q3_vp")
-        c3_v_e = st.text_area("시각 연출 효과:", key="s1_q3_ve")
+        st.markdown("** (1) 과제의 특성 **")
+        ans1_1 = st.text_input("s1_1_input", label_visibility="collapsed", key="s1_1")
     with col2:
-        c3_a_p = st.text_area("(2) 청각 연출 계획 (Ⓑ):", key="s1_q3_ap")
-        c3_a_e = st.text_area("청각 연출 효과:", key="s1_q3_ae")
+        st.markdown("** (2) 효율적인 환경 및 방법 **")
+        ans1_2 = st.text_input("s1_2_input", label_visibility="collapsed", key="s1_2")
+    with col3:
+        st.markdown("** (3) 관련된 심리 현상 **")
+        ans1_3 = st.text_input("s1_3_input", label_visibility="collapsed", key="s1_3")
 
-    if st.button("세트 1 답안 제출 및 채점", type="primary"):
-        s1, f1 = grade_set1_q1(c1_1, c1_2, c1_3)
-        s2, f2 = grade_set1_q2(c2_1, c2_2)
-        s3, f3 = grade_set1_q3(c3_v_p, c3_v_e, c3_a_p, c3_a_e)
+    st.divider()
 
-        total_score = s1 + s2 + s3
-        st.divider()
-        st.subheader(f"💯 총점: {total_score} / 16 점")
+    # --------------------------------------
+    # 문항 2
+    # --------------------------------------
+    st.subheader("[서·논술형 2]")
+    st.write("윗글을 활용하여 '과제 난이도에 따른 효율적인 학습 전략'에 대한 설명문을 작성하려 한다. 주어진 첫 문장에 이어지는 내용을 <조건>에 맞추어 작성하시오.")
+    
+    st.info("<b>주어진 첫 문장:</b> 과제의 특성과 난이도에 따라 우리의 학습 효율을 높이는 방법은 다르게 적용되어야 한다.", icon="✍️")
 
-        st.write("**[서·논술형 1 피드백]**")
-        for f in f1: st.write(f"- {f}")
+    st.markdown("""
+    <div class="gray-box">
+        <b><i style="color: #d92d20;">📌 [작성 조건]</i></b><br>
+        ⚠️ 서로 다른 2가지의 설명 방법을 사용하여, 주어진 문장에 이어지는 문장을 (1), (2)에 각각 하나씩 작성할 것.<br>
+        ⚠️ 윗글에 제시된 내용만을 활용하여 문장을 구성할 것. (지문에 없는 외부 배경지식을 활용할 경우 인정하지 않음)<br>
+        ⚠️ 각 문장의 끝에 자신이 사용한 설명 방법의 명칭을 괄호에 넣어 표기할 것.
+    </div>
+    """, unsafe_allow_html=True)
 
-        st.write("**[서·논술형 2 피드백]**")
-        for f in f2: st.write(f"- {f}")
+    st.markdown("** (1) 문장 작성 **")
+    ans2_1 = st.text_area("s1_2_1_input", label_visibility="collapsed", key="s1_2_1")
 
-        st.write("**[서·논술형 3 피드백]**")
-        for f in f3: st.write(f"- {f}")
+    st.markdown("** (2) 문장 작성 **")
+    ans2_2 = st.text_area("s1_2_2_input", label_visibility="collapsed", key="s1_2_2")
 
-# ------------------------------------------
-# TAB 2 & TAB 3: 세트 2, 3 확장 가이드
-# ------------------------------------------
+    st.divider()
+
+    # --------------------------------------
+    # 문항 3
+    # --------------------------------------
+    st.subheader("[서·논술형 3]")
+    st.write("윗글을 바탕으로 '상황에 맞는 학습 공간 선택법'을 설명하는 영상을 제작하려 한다. 다음 기획안을 보고 물음에 답하시오.")
+
+    st.markdown("""
+    <div class="blue-box">
+        <h4>🎬 [영상 기획안]</h4>
+        <p><b>주제:</b> 사회적 촉진과 억제를 활용한 스마트한 공부법</p>
+        <p><b>[장면 1] 쉬운 과제를 할 때</b><br>
+        - 시각 요소: 백색소음이 있는 밝은 도서관에서 친구들과 가볍게 미소 지으며 공부하는 학생들의 모습을 넓은 화면(풀샷)으로 보여줌.<br>
+        - 청각 요소: 경쾌하고 리듬감 있는 배경음악과 함께 사람들의 가벼운 발소리와 책장 넘기는 소리를 깔아줌</p>
+        <p><b>[장면 2] 어려운 과제를 할 때</b><br>
+        - 시각 요소 (Ⓐ): <i>[작성 내용]</i><br>
+        - 청각 요소 (Ⓑ): <i>[작성 내용]</i></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="gray-box">
+        <b><i style="color: #d92d20;">📌 [작성 조건]</i></b><br>
+        ⚠️ 윗글을 참고하여 어려운 과제를 할 때 필요한 환경의 특성이 잘 드러나도록 Ⓐ와 Ⓑ에 들어갈 연출 계획을 세울 것.<br>
+        ⚠️ 자신이 설정한 시각/청각 요소가 글의 내용을 전달하는 데 어떤 효과가 있는지 각각 서술할 것.
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("** (1) 시각 요소 연출 (Ⓐ) **")
+        ans3_vp = st.text_input("s1_3_vp_input", label_visibility="collapsed", key="s1_3_vp")
+        
+        st.markdown("** 시각 요소의 효과 **")
+        ans3_ve = st.text_area("s1_3_ve_input", label_visibility="collapsed", key="s1_3_ve")
+
+    with col_b:
+        st.markdown("** (2) 청각 요소 연출 (Ⓑ) **")
+        ans3_ap = st.text_input("s1_3_ap_input", label_visibility="collapsed", key="s1_3_ap")
+        
+        st.markdown("** 청각 요소의 효과 **")
+        ans3_ae = st.text_area("s1_3_ae_input", label_visibility="collapsed", key="s1_3_ae")
+
+    # 제출 버튼
+    st.write("")
+    if st.button("제출 및 채점하기", type="primary", key="btn_s1"):
+        s1, f1 = grade_set1_q1(ans1_1, ans1_2, ans1_3)
+        s2, f2 = grade_set1_q2(ans2_1, ans2_2)
+        s3, f3 = grade_set1_q3(ans3_vp, ans3_ve, ans3_ap, ans3_ae)
+        total = s1 + s2 + s3
+
+        st.success(f"🎉 채점 완료! 총점: {total} / 16점")
+        
+        with st.expander("🔍 상세 피드백 확인하기", expanded=True):
+            st.write("**[서·논술형 1]**")
+            for f in f1: st.write(f"- {f}")
+            st.write("**[서·논술형 2]**")
+            for f in f2: st.write(f"- {f}")
+            st.write("**[서·논술형 3]**")
+            for f in f3: st.write(f"- {f}")
+
 with tab2:
-    st.header("2번 세트: 정전기의 특징")
-    with st.expander("📌 [세트 2] 선택지별 모범 답안 보기"):
-        st.markdown("""
-        **[서·논술형 1] 모범 답안**
-        - (1) 높은 곳에 고여 있는 물
-        - (2) 전하가 이동하지 않고 머물러 있음
-        - (3) 전압은 매우 높지만 전하가 이동하지 않아 위험하지 않음
-
-        **[서·논술형 2] 선택지별 모범 답안**
-        - **선택지 A (정의 + 비교/대조 조합)**
-          - (1) 정전기란 전하가 정지 상태로 있어 그 분포가 시간적으로 변화하지 않는 전기를 의미한다. (정의)
-          - (2) 우리가 실생활에서 쓰는 전기가 '흐르는 물'인 것과 달리 정전기는 전하가 이동하지 않는 '높은 곳에 고여 있는 물'과 같다. (비교/대조)
-        - **선택지 B (정의 + 인과 조합)**
-          - (1) 정전기는 흐르지 않고 한곳에 머물러 있는 전기를 말한다. (정의)
-          - (2) 따라서 전압은 어마어마하게 높아도 전하가 이동하지 않으므로 감전 등의 피해나 위험이 발생하지 않는다. (인과)
-
-        **[서·논술형 3] 모범 답안**
-        - **(1) 시각 연출**: 높은 산꼭대기 수조에 물이 아래로 떨어지지 않고 잔잔히 고여 있는 모습을 보여줌.
-          - **효과**: 전압은 높지만 전하가 이동하지 않아 위험 피해가 없는 정전기의 특성을 시각적으로 쉽게 이해시킴.
-        - **(2) 청각 연출**: 거대한 폭포수 소리와 대비되도록 소리가 거의 나지 않는 고요한 정적 음향을 깔아줌.
-          - **효과**: 전하의 이동이 없이 멈추어 있는 조용한 상태임을 청각적으로 대조 강조함.
-        """)
-    st.info("세트 1과 동일한 구조의 자동 채점 파이프라인이 적용됩니다.")
+    st.info("2번 세트도 동일하게 라벨이 숨겨진 밀착 입력창 레이아웃이 적용됩니다.")
 
 with tab3:
-    st.header("3번 세트: 인공 지능과 예술")
-    with st.expander("📌 [세트 3] 선택지별 모범 답안 보기"):
-        st.markdown("""
-        **[서·논술형 1] 모범 답안**
-        - (1) 완벽한 기술을 보여주지만 마음을 울리지 못하는 로봇의 피겨 스케이팅
-        - (2) 감정을 느끼지 못하고 독자적인 철학이나 이야기(경험, 관점)가 없으므로 예술로 보기 어렵다.
-        - (3) 기존 미술계에 큰 변화를 가져오고 예술의 범주를 확장하는 상징적 가치가 있음
-
-        **[서·논술형 2] 선택지별 모범 답안**
-        - **선택지 A (예시/비교 + 대조 조합)**
-          - (1) 올림픽 선수의 노력이 감동을 주듯 인간의 예술에는 작가의 감정과 삶의 경험이 담겨 있다. (예시/비교)
-          - (2) 이와 달리 인공지능의 그림은 감정이나 철학이 없어 예술로 보기는 어렵지만, 예술의 범주를 넓히는 상징적 가치가 있다. (대조)
-        - **선택지 B (정의 + 대조 조합)**
-          - (1) 진정한 예술이란 작가의 고유한 철학, 삶의 경험, 세상을 바라보는 관점이 종합적으로 담긴 창작물이다. (정의)
-          - (2) 그러나 인공지능 그림은 독자적 서사는 결여되어 예술성은 낮으나 기존 미술계에 변화를 가져온다는 점에서 의의가 있다. (대조)
-
-        **[서·논술형 3] 모범 답안**
-        - **(1) 시각 연출**: 작가가 고뇌하며 작품을 완성하고 완성된 작품 앞에서 감격해 눈물 흘리는 모습을 연출함.
-          - **효과**: 인간의 예술 작품에는 작가의 감정과 삶의 경험이 녹아있어 보는 이에게 깊은 울림을 준다는 점을 생생하게 전달함.
-        - **(2) 청각 연출**: 기계음과 대비되는 거친 숨소리와 서정적이고 웅장한 오케스트라 선율을 깔아줌.
-          - **효과**: 감정적 공감과 진정한 예술이 주는 내면의 울림을 청각적으로 극대화함.
-        """)
-    st.info("세트 1과 동일한 구조의 자동 채점 파이프라인이 적용됩니다.")
+    st.info("3번 세트도 동일하게 라벨이 숨겨진 밀착 입력창 레이아웃이 적용됩니다.")
